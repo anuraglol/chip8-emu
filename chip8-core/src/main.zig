@@ -247,6 +247,28 @@ pub const Emu = struct {
 
             0xD000 => {
                 // draw sprite function, we'll do it later
+                const x_coord = self.v_reg[d2];
+                const y_coord = self.v_reg[d3];
+                const num_rows = d4;
+                const flipped = false;
+
+                for (0..num_rows) |y_line| {
+                    const addr = self.i_reg + y_line;
+                    const pixels = self.ram[addr];
+
+                    for (0..8) |x_line| {
+                        if ((pixels & (0b1000_0000 >> x_line)) != 0) {
+                            const x = (x_coord + x_line) % SCREEN_W;
+                            const y = (y_coord + y_line) % SCREEN_H;
+
+                            const idx = x + SCREEN_W * y; // pxiel's index
+                            flipped = flipped | self.screen[idx];
+                            self.screen[idx] = true;
+                        }
+                    }
+                }
+
+                if (flipped) self.v_reg[0xF] = 1 else self.v_reg[0xF] = 0;
             },
 
             0xE000 => {
@@ -299,7 +321,16 @@ pub const Emu = struct {
                     },
 
                     0x33 => {
-                        // store bcd encoding of vx into i todo
+                        // store bcd encoding of vx into i - todo
+                        const vx = self.v_reg[x];
+
+                        const hundreds = vx / 100;
+                        const tens = (vx / 10) % 10;
+                        const ones = vx % 10;
+
+                        for ([_]u8{ hundreds, tens, ones }, 0..) |val, i| {
+                            self.ram[self.i_reg + @as(u16, i)] = val;
+                        }
                     },
 
                     0x55 => {

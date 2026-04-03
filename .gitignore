@@ -1,0 +1,27 @@
+# Zig build outputs
+zig-out/
+zig-cache/
+
+# Zig global cache (optional, sometimes appears)
+.zig-cache/
+
+# Build files
+build/
+dist/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Editor stuff
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+*.o
+*.exe
+*.out

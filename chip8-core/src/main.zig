@@ -149,12 +149,78 @@ pub const Emu = struct {
             },
 
             0x8000 => {
-                const x = d2;
-                const y = d3;
-                self.v_reg[x] = self.v_reg[y];
+                switch (d4) { // all match 0x8XYZ, where Z is the 4th digit thats changing
+                    0 => {
+                        const x = d2;
+                        const y = d3;
+                        self.v_reg[x] = self.v_reg[y];
+                    },
+                    1 => {
+                        const x = d2;
+                        const y = d3;
+                        self.v_reg[x] = self.v_reg[x] | self.v_reg[y];
+                    },
+                    2 => {
+                        const x = d2;
+                        const y = d3;
+                        self.v_reg[x] = self.v_reg[x] & self.v_reg[y];
+                    },
+                    3 => {
+                        const x = d2;
+                        const y = d3;
+                        self.v_reg[x] = self.v_reg[x] ^ self.v_reg[y];
+                    },
+                    4 => {
+                        const x = d2;
+                        const y = d3;
+                        const new_vx, const overflow = @addWithOverflow(self.v_reg[x], self.v_reg[y]);
+                        const new_vf = if (overflow) 1 else 0;
+
+                        self.v_reg[x] = new_vx;
+                        self.v_reg[0xF] = new_vf; // in the 16th register, we store if an overflow happened, aka the carry flag
+                    },
+                    5 => {
+                        const x = d2;
+                        const y = d3;
+                        const new_vx, const overflow = @addWithOverflow(self.v_reg[x], self.v_reg[y]);
+                        const new_vf = if (overflow) 0 else 1; // borrow instead of carry flag this time
+
+                        self.v_reg[x] = new_vx;
+                        self.v_reg[0xF] = new_vf;
+                    },
+                    6 => {
+                        const x = d2;
+                        const lsb = self.v_reg[x] & 1;
+                        self.v_reg[x] >>= 1;
+                        self.v_reg[0xF] = lsb;
+                    },
+                    7 => {
+                        const x = d2;
+                        const y = d3;
+                        const new_vx, const overflow = @addWithOverflow(self.v_reg[x], self.v_reg[y]);
+                        const new_vf = if (overflow) 0 else 1;
+
+                        self.v_reg[x] = new_vx;
+                        self.v_reg[0xF] = new_vf;
+                    },
+                    0xE => {
+                        const x = d2;
+                        const msb = (self.v_reg[x] & 0x80) >> 7;
+                        self.v_reg[x] <<= 1;
+                        self.v_reg[0xF] = msb;
+                    },
+                    else => error.UnimplementedOpCode,
+                }
             },
 
-            else => {},
+            0x9000 => {
+                const x, const y = [_]u16{ d2, d3 };
+                if (self.v_reg[x] != self.v_reg[y]) {
+                    self.pc = self.pc + 2;
+                }
+            },
+
+            else => error.UnimplementedOpCode,
         }
     }
 

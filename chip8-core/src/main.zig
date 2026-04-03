@@ -8,6 +8,9 @@ pub const RAM_SIZE: usize = 4096;
 pub const NUM_REGS: usize = 16;
 pub const STACK_SIZE: usize = 16;
 pub const START_ADDR: u16 = 0x200;
+pub const NUM_KEYS: usize = 16;
+
+const UN_ERR = error.UnimplementedOpCode;
 
 const FONTSET_SIZE: usize = 80;
 const FONTSET: [FONTSET_SIZE]u8 = [FONTSET_SIZE]u8{
@@ -35,6 +38,7 @@ const DEFAULT_EMU = Emu{
     .screen = [_]bool{false} ** (SCREEN_H * SCREEN_W),
     .v_reg = [_]u8{0} ** NUM_REGS,
     .i_reg = 0,
+    .keys = [_]bool{false} ** NUM_KEYS,
     .sp = 0,
     .stack = [_]u16{0} ** STACK_SIZE,
     .dt = 0,
@@ -51,6 +55,7 @@ pub const Emu = struct {
     stack: [STACK_SIZE]u16, // stack for subroutine calls (up to 16 levels)
     dt: u8, // delay timer
     st: u8, // sound timer
+    keys: [NUM_KEYS]bool,
 
     pub fn init() Emu {
         const new_emu = DEFAULT_EMU;
@@ -209,7 +214,7 @@ pub const Emu = struct {
                         self.v_reg[x] <<= 1;
                         self.v_reg[0xF] = msb;
                     },
-                    else => error.UnimplementedOpCode,
+                    else => UN_ERR,
                 }
             },
 
@@ -220,7 +225,100 @@ pub const Emu = struct {
                 }
             },
 
-            else => error.UnimplementedOpCode,
+            0xA000 => {
+                const nnn = op & 0x0FFF;
+                self.i_reg = nnn;
+            },
+
+            0xB000 => {
+                const nnn = op & 0x0FFF;
+                self.pc = self.v_reg[0] + nnn;
+            },
+
+            0xC000 => { // imp, this is the chip8's random number generation
+                var prng = std.rand.DefaultPrng.init(12345); // seed
+                var random = prng.random();
+
+                const rng: u8 = random.int(u8);
+                const x = d2;
+                const nn = (op & 0xFF);
+                self.v_reg[x] = rng & nn;
+            },
+
+            0xD000 => {
+                // draw sprite function, we'll do it later
+            },
+
+            0xE000 => {
+                switch (d3) {
+                    9 => {
+                        const x = d2;
+                        const vx = self.v_reg[x];
+                        const key = self.keys[vx];
+                        if (key) {
+                            self.pc = self.pc + 2;
+                        }
+                    },
+                    0xA => {
+                        const x = d2;
+                        const vx = self.v_reg[x];
+                        const key = self.keys[vx];
+                        if (!key) {
+                            self.pc = self.pc + 2;
+                        }
+                    },
+                    else => UN_ERR,
+                }
+            },
+
+            0xF000 => {
+                const AB = op & 0x00FF;
+                const x = d2;
+                switch (AB) {
+                    0x07 => self.v_reg[x] = self.dt,
+                    0x0A => {
+                        // waits for key press, stores index in VX, imp
+                        const pressed = false;
+                        for (self.keys, 0..) |key, i| {
+                            if (key) {
+                                self.v_reg[x] = i;
+                                pressed = true;
+                                break;
+                            }
+                        }
+
+                        if (!pressed) self.pc = self.pc - 2; // redo opcode
+                    },
+                    0x15 => self.dt = self.v_reg[x],
+                    0x18 => self.st = self.v_reg[x],
+                    0x1E => self.i_reg = self.i_reg +% self.v_reg[x],
+
+                    0x29 => {
+                        const c = self.v_reg[x];
+                        self.i_reg = c * 5; // since all font sprites take up 5 bytes each, the ram address is basically c times 5
+                    },
+
+                    0x33 => {
+                        // store bcd encoding of vx into i todo
+                    },
+
+                    0x55 => {
+                        const i = self.i_reg;
+                        for (0..x) |idx| {
+                            self.ram[i + idx] = self.v_reg[idx];
+                        }
+                    },
+
+                    0x65 => {
+                        const i = self.i_reg;
+                        for (0..x) |idx| {
+                            self.v_reg[idx] = self.ram[i + idx];
+                        }
+                    },
+                }
+            },
+
+            else => UN_ERR,
         }
     }
 

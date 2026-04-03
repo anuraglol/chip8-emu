@@ -85,7 +85,78 @@ pub const Emu = struct {
         return op;
     }
 
-    fn execute(self: *Emu, op: u16) void {}
+    fn execute(self: *Emu, op: u16) void {
+        const d1 = (op & 0xF000) >> 12;
+        const d2 = (op & 0x0F00) >> 8;
+        const d3 = (op & 0x00F0) >> 4;
+        const d4 = op & 0x000F;
+
+        switch (op & 0xF000) {
+            0x0000 => switch (op) {
+                0x00E0 => self.screen = [_]bool{false} ** (SCREEN_H * SCREEN_W),
+                0x00EE => {
+                    const ret_addr = self.pop();
+                    self.pc = ret_addr;
+                },
+                else => {},
+            },
+
+            0x1000 => {
+                const nnn = op & 0x0FFF; // extracts the NNN part, from 0x1NNN, we match op & 0xF000 basically the first digit
+                self.pc = nnn;
+            },
+
+            0x2000 => {
+                const nnn = op & 0x0FFF;
+                self.push(self.pc);
+                self.pc = nnn;
+            },
+
+            0x3000 => { // skip next if VX == NN, format is 3XNN, x is second digit basically, NN is what follows after
+                const x = d2;
+                const nn = (op & 0xFF);
+                if (self.v_reg[x] == nn) {
+                    self.pc = self.pc + 2;
+                }
+            },
+
+            0x4000 => { // skip next if VX != NN, format is 4XNN, x is second digit basically, NN is what follows after
+                const x = d2;
+                const nn = (op & 0xFF);
+                if (self.v_reg[x] != nn) {
+                    self.pc = self.pc + 2;
+                }
+            },
+
+            0x5000 => { // 5XY0, skip next if VX == VY
+                const x = d2;
+                const y = d3;
+                if (self.v_reg[x] == self.v_reg[y]) {
+                    self.pc = self.pc + 2;
+                }
+            },
+
+            0x6000 => { // 6XNN, VX = NN, set the V register specified by the second register to the value given
+                const x = d2;
+                const nn: u8 = @intCast(op & 0x00FF);
+                self.v_reg[x] = nn;
+            },
+
+            0x7000 => {
+                const x = d2;
+                const nn: u8 = @intCast(op & 0x00FF);
+                self.v_reg[x] = self.v_reg[x] +% nn; // wrapping add - refer to zig docs
+            },
+
+            0x8000 => {
+                const x = d2;
+                const y = d3;
+                self.v_reg[x] = self.v_reg[y];
+            },
+
+            else => {},
+        }
+    }
 
     pub fn tick(self: *Emu) !void {
         const op = self.fetch();
